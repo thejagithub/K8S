@@ -2,11 +2,11 @@ pipeline {
     agent any
 
     environment {
-        ECR_REGISTRY = "<aws-account-id>.dkr.ecr.<region>.amazonaws.com"
+        ECR_REGISTRY = "707272278447.dkr.ecr.ap-northeast-1.amazonaws.com/springboot-app"
         ECR_REPO = "springboot-app"
         IMAGE_TAG = "latest"
-        AWS_REGION = "<your-region>"
-        MINIKUBE_SERVER = "<minikube-ec2-private-ip>"
+        AWS_REGION = "ap-northeast-1"
+        MINIKUBE_SERVER = "172.31.38.186"
         MINIKUBE_USER = "ubuntu"
     }
 
@@ -14,7 +14,7 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/<your-username>/<your-repo>.git'
+                git branch: 'main', url: 'https://github.com/thejagithub/K8S.git'
             }
         }
 
@@ -44,34 +44,46 @@ pipeline {
         }
 
         stage('Deploy to Minikube') {
-            steps {
-                sshagent(['minikube-ssh-key']) {
-                    sh """
-                        ssh -o StrictHostKeyChecking=no ${MINIKUBE_USER}@${MINIKUBE_SERVER} '
+    steps {
+        sshagent(['minikube-ssh-key']) {
+            sh """
+                # Create k8s directory on Minikube EC2
+                ssh -o StrictHostKeyChecking=no ${MINIKUBE_USER}@${MINIKUBE_SERVER} \
+                    'mkdir -p /home/ubuntu/k8s'
 
-                            # Login to ECR
-                            aws ecr get-login-password --region ${AWS_REGION} | \
-                            docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                # Copy K8s manifests to Minikube EC2
+                scp -o StrictHostKeyChecking=no \
+                    k8s/deployment.yaml ${MINIKUBE_USER}@${MINIKUBE_SERVER}:/home/ubuntu/k8s/deployment.yaml
 
-                            # Create or update imagePullSecret
-                            kubectl create secret docker-registry ecr-secret \
-                                --docker-server=${ECR_REGISTRY} \
-                                --docker-username=AWS \
-                                --docker-password=\$(aws ecr get-login-password --region ${AWS_REGION}) \
-                                --dry-run=client -o yaml | kubectl apply -f -
+                scp -o StrictHostKeyChecking=no \
+                    k8s/service.yaml ${MINIKUBE_USER}@${MINIKUBE_SERVER}:/home/ubuntu/k8s/service.yaml
 
-                            # Apply manifests
-                            kubectl apply -f /home/ubuntu/k8s/deployment.yaml
-                            kubectl apply -f /home/ubuntu/k8s/service.yaml
+                # SSH in and deploy
+                ssh -o StrictHostKeyChecking=no ${MINIKUBE_USER}@${MINIKUBE_SERVER} '
 
-                            # Verify deployment
-                            kubectl rollout status deployment/springboot-app
-                        '
-                    """
-                }
-            }
-        }
+                    # Login to ECR
+                    aws ecr get-login-password --region ${AWS_REGION} | \
+                    docker login --username AWS --password-stdin ${ECR_REGISTRY}
+
+                    # Create or update imagePullSecret
+                    kubectl create secret docker-registry ecr-secret \
+                        --docker-server=${ECR_REGISTRY} \
+                        --docker-username=AWS \
+                        --docker-password=\$(aws ecr get-login-password --region ${AWS_REGION}) \
+                        --dry-run=client -o yaml | kubectl apply -f -
+
+                    # Apply manifests
+                    kubectl apply -f /home/ubuntu/k8s/deployment.yaml
+                    kubectl apply -f /home/ubuntu/k8s/service.yaml
+
+                    # Verify deployment
+                    kubectl rollout status deployment/springboot-app
+                '
+            """
+         }
+       }
     }
+  }
 
     post {
         success {
