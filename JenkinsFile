@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        ECR_REGISTRY = "707272278447.dkr.ecr.ap-northeast-1.amazonaws.com/springboot-app"
+        ECR_REGISTRY = "707272278447.dkr.ecr.ap-northeast-1.amazonaws.com"
         ECR_REPO = "springboot-app"
         IMAGE_TAG = "latest"
         AWS_REGION = "ap-northeast-1"
